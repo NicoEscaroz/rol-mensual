@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { SearchIcon, FilterIcon, PlusIcon, EditIcon, SaveIcon, XIcon, TrashIcon } from 'lucide-react';
 import { Draggable, Droppable } from 'react-beautiful-dnd';
 import { Song, songService } from '../services/dataService';
+import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 
 interface EditableCell {
   songId: string;
@@ -35,6 +36,15 @@ export const SongBank: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [selectedSong, setSelectedSong] = useState<Song | null>(null);
+  const [deleteModal, setDeleteModal] = useState<{
+    isOpen: boolean;
+    song: Song | null;
+    isLoading: boolean;
+  }>({
+    isOpen: false,
+    song: null,
+    isLoading: false
+  });
   const filteredSongs = songs.filter(song => {
     const matchesSearch = song.name.toLowerCase().includes(searchTerm.toLowerCase()) || song.originalSinger.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = selectedCategory ? song.category === selectedCategory : true;
@@ -104,18 +114,30 @@ export const SongBank: React.FC = () => {
     });
   };
 
-  const deleteSong = async (songId: string) => {
-    if (confirm('¿Estás seguro de que quieres eliminar esta canción?')) {
-      try {
-        await songService.delete(songId);
-        const updatedSongs = await songService.getAll();
-        setSongs(updatedSongs);
-        if (selectedSong?.id === songId) {
-          setSelectedSong(null);
-        }
-      } catch (error) {
-        console.error('Error deleting song:', error);
+  const openDeleteModal = (song: Song) => {
+    setDeleteModal({ isOpen: true, song, isLoading: false });
+  };
+
+  const closeDeleteModal = () => {
+    setDeleteModal({ isOpen: false, song: null, isLoading: false });
+  };
+
+  const confirmDeleteSong = async () => {
+    if (!deleteModal.song) return;
+
+    setDeleteModal(prev => ({ ...prev, isLoading: true }));
+
+    try {
+      await songService.delete(deleteModal.song.id);
+      const updatedSongs = await songService.getAll();
+      setSongs(updatedSongs);
+      if (selectedSong?.id === deleteModal.song.id) {
+        setSelectedSong(null);
       }
+      closeDeleteModal();
+    } catch (error) {
+      console.error('Error deleting song:', error);
+      setDeleteModal(prev => ({ ...prev, isLoading: false }));
     }
   };
 
@@ -236,7 +258,7 @@ export const SongBank: React.FC = () => {
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-semibold">{selectedSong.name}</h3>
                 <button
-                  onClick={() => deleteSong(selectedSong.id)}
+                  onClick={() => openDeleteModal(selectedSong)}
                   className="p-2 text-red-500 hover:bg-red-100 dark:hover:bg-red-900 rounded"
                   title="Eliminar canción"
                 >
@@ -405,5 +427,16 @@ export const SongBank: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={deleteModal.isOpen}
+        title="Eliminar Canción"
+        message="Esta acción no se puede deshacer. ¿Estás seguro de que quieres eliminar esta canción?"
+        itemName={deleteModal.song?.name}
+        onConfirm={confirmDeleteSong}
+        onCancel={closeDeleteModal}
+        isLoading={deleteModal.isLoading}
+      />
     </div>;
 };

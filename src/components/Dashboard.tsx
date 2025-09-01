@@ -3,10 +3,10 @@ import { DragDropContext, DropResult } from 'react-beautiful-dnd';
 import { ScheduleTable } from './ScheduleTable';
 import { SongBank } from './SongBank';
 import { BandMembers } from './BandMembers';
-import { Statistics } from './Statistics';
-import { MenuIcon, XIcon, CalendarIcon, MusicIcon, UsersIcon, BarChartIcon } from 'lucide-react';
+
+import { MenuIcon, XIcon, CalendarIcon, MusicIcon, UsersIcon } from 'lucide-react';
 import { songService, memberService, scheduleService } from '../services/dataService';
-type Tab = 'schedule' | 'songs' | 'members' | 'statistics';
+type Tab = 'schedule' | 'songs' | 'members';
 export const Dashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>('schedule');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -92,7 +92,6 @@ export const Dashboard: React.FC = () => {
           {activeTab === 'schedule' && 'Programa'}
           {activeTab === 'songs' && 'Canciones'}
           {activeTab === 'members' && 'Miembros'}
-          {activeTab === 'statistics' && 'Estadísticas'}
         </h2>
         <button onClick={toggleMobileMenu} className="p-2 rounded-md hover:bg-gray-200 dark:hover:bg-gray-800">
           {mobileMenuOpen ? <XIcon size={24} /> : <MenuIcon size={24} />}
@@ -125,12 +124,7 @@ export const Dashboard: React.FC = () => {
                   Miembros
                 </button>
               </li>
-              <li>
-                <button onClick={() => selectTab('statistics')} className={`flex items-center w-full p-3 rounded-md ${activeTab === 'statistics' ? 'bg-gray-200 dark:bg-gray-800' : ''}`}>
-                  <BarChartIcon className="mr-3" size={20} />
-                  Estadísticas
-                </button>
-              </li>
+
             </ul>
           </nav>
         </div>}
@@ -148,10 +142,7 @@ export const Dashboard: React.FC = () => {
           <UsersIcon className="mr-2" size={16} />
           Miembros
         </button>
-        <button onClick={() => setActiveTab('statistics')} className={`px-4 py-2 rounded-md flex items-center ${activeTab === 'statistics' ? 'bg-gray-200 dark:bg-gray-800' : 'hover:bg-gray-100 dark:hover:bg-gray-800'}`}>
-          <BarChartIcon className="mr-2" size={16} />
-          Estadísticas
-        </button>
+
       </div>
       {/* Content */}
       <div className="mt-4">
@@ -159,7 +150,6 @@ export const Dashboard: React.FC = () => {
           {activeTab === 'schedule' && <ScheduleTable />}
           {activeTab === 'songs' && <SongBank />}
           {activeTab === 'members' && <BandMembers />}
-          {activeTab === 'statistics' && <Statistics />}
         </DragDropContext>
       </div>
     </div>;

@@ -3,6 +3,7 @@ import { DownloadIcon, PlusIcon, TrashIcon, SearchIcon, FilterIcon, XIcon, Minus
 import { Droppable, Draggable } from 'react-beautiful-dnd';
 import { generateSundays, groupSchedulesByMonth } from '../utils/dateUtils';
 import { SundaySchedule, scheduleService, Song, BandMember, songService, memberService } from '../services/dataService';
+import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 
 interface InstrumentSelectionModal {
   show: boolean;
@@ -34,6 +35,15 @@ export const ScheduleTable: React.FC = () => {
   const [availableSongs, setAvailableSongs] = useState<Song[]>([]);
   const [availableMembers, setAvailableMembers] = useState<BandMember[]>([]);
   const [collapsedMonths, setCollapsedMonths] = useState<Set<string>>(new Set());
+  const [deleteModal, setDeleteModal] = useState<{
+    isOpen: boolean;
+    schedule: SundaySchedule | null;
+    isLoading: boolean;
+  }>({
+    isOpen: false,
+    schedule: null,
+    isLoading: false
+  });
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -41,18 +51,18 @@ export const ScheduleTable: React.FC = () => {
         
         // If no schedules exist, create initial ones
         if (loadedSchedules.length === 0) {
-          const sundays = generateSundays();
-          const initialSchedules = sundays.map(date => ({
-            id: date.toISOString(),
-            date,
-            songs: [],
-            band: [],
-            leaders: {
-              talkback: '',
-              dm1: '',
-              dm2: ''
-            }
-          }));
+    const sundays = generateSundays();
+    const initialSchedules = sundays.map(date => ({
+      id: date.toISOString(),
+      date,
+      songs: [],
+      band: [],
+      leaders: {
+        talkback: '',
+        dm1: '',
+        dm2: ''
+      }
+    }));
           
           for (const schedule of initialSchedules) {
             await scheduleService.create(schedule);
@@ -248,13 +258,27 @@ export const ScheduleTable: React.FC = () => {
     }
   };
 
-  const handleRemoveDate = async (id: string) => {
+  const openDeleteModal = (schedule: SundaySchedule) => {
+    setDeleteModal({ isOpen: true, schedule, isLoading: false });
+  };
+
+  const closeDeleteModal = () => {
+    setDeleteModal({ isOpen: false, schedule: null, isLoading: false });
+  };
+
+  const confirmDeleteSchedule = async () => {
+    if (!deleteModal.schedule) return;
+
+    setDeleteModal(prev => ({ ...prev, isLoading: true }));
+
     try {
-      await scheduleService.delete(id);
+      await scheduleService.delete(deleteModal.schedule.id);
       const updatedSchedules = await scheduleService.getAll();
       setSchedules(updatedSchedules);
+      closeDeleteModal();
     } catch (error) {
       console.error('Error deleting schedule:', error);
+      setDeleteModal(prev => ({ ...prev, isLoading: false }));
     }
   };
 
@@ -408,10 +432,10 @@ export const ScheduleTable: React.FC = () => {
               </button>
               
               {!isCollapsed && (
-                <div className="overflow-x-auto">
-                  <table className="w-full border-collapse">
-                    <thead>
-                      <tr className="bg-gray-100 dark:bg-gray-800">
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="bg-gray-100 dark:bg-gray-800">
                         <th className="p-3 text-left">Fecha</th>
                         <th className="p-3 text-left">
                           <div className="flex items-center justify-between">
@@ -425,9 +449,9 @@ export const ScheduleTable: React.FC = () => {
                         </th>
                         <th className="p-3 text-left">Líderes</th>
                         <th className="p-3 text-center w-10">Acciones</th>
-                      </tr>
-                    </thead>
-                    <tbody>
+            </tr>
+          </thead>
+          <tbody>
                       {monthSchedules.map(schedule => <tr key={schedule.id} className="border-b border-gray-200 dark:border-gray-700">
                 <td className="p-3">
                   {new Date(schedule.date).toLocaleDateString('es-ES', {
@@ -509,9 +533,9 @@ export const ScheduleTable: React.FC = () => {
                         ) : (
                           <div className="space-y-2">
                             <div className="flex items-center justify-center h-10 border border-dashed border-gray-300 dark:border-gray-700 rounded-md">
-                              <span className="text-gray-400 text-sm">
+                        <span className="text-gray-400 text-sm">
                                 Arrastra canciones aquí
-                              </span>
+                        </span>
                             </div>
                             <button
                               onClick={() => openAddModal('song', schedule.id)}
@@ -523,7 +547,7 @@ export const ScheduleTable: React.FC = () => {
                             {provided.placeholder}
                           </div>
                         )}
-                      </div>
+                  </div>
                     )}
                   </Droppable>
                 </td>
@@ -556,7 +580,7 @@ export const ScheduleTable: React.FC = () => {
                                   >
                                     <div className="flex justify-between items-center">
                                       <span>
-                                        {member.name} ({member.instrument})
+                            {member.name} ({member.instrument})
                                       </span>
                                       <button
                                         onClick={(e) => {
@@ -579,9 +603,9 @@ export const ScheduleTable: React.FC = () => {
                         ) : (
                           <div className="space-y-2">
                             <div className="flex items-center justify-center h-10 border border-dashed border-gray-300 dark:border-gray-700 rounded-md">
-                              <span className="text-gray-400 text-sm">
+                        <span className="text-gray-400 text-sm">
                                 Arrastra miembros aquí
-                              </span>
+                        </span>
                             </div>
                             <button
                               onClick={() => openAddModal('member', schedule.id)}
@@ -593,7 +617,7 @@ export const ScheduleTable: React.FC = () => {
                             {provided.placeholder}
                           </div>
                         )}
-                      </div>
+                  </div>
                     )}
                   </Droppable>
                 </td>
@@ -632,13 +656,13 @@ export const ScheduleTable: React.FC = () => {
                   </div>
                 </td>
                 <td className="p-3 text-center">
-                  <button onClick={() => handleRemoveDate(schedule.id)} className="p-1 text-gray-500 hover:text-red-500 transition-colors" aria-label="Remove date">
+                  <button onClick={() => openDeleteModal(schedule)} className="p-1 text-gray-500 hover:text-red-500 transition-colors" aria-label="Remove date">
                     <TrashIcon size={16} />
                   </button>
                 </td>
-                      </tr>)}
-                    </tbody>
-                  </table>
+              </tr>)}
+          </tbody>
+        </table>
                 </div>
               )}
             </div>
@@ -813,5 +837,16 @@ export const ScheduleTable: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={deleteModal.isOpen}
+        title="Eliminar Programa Dominical"
+        message="Esta acción eliminará permanentemente el programa dominical y toda la información asociada (canciones, miembros, etc.)."
+        itemName={deleteModal.schedule ? deleteModal.schedule.date.toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : undefined}
+        onConfirm={confirmDeleteSchedule}
+        onCancel={closeDeleteModal}
+        isLoading={deleteModal.isLoading}
+      />
     </div>;
 };

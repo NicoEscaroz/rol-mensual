@@ -10,6 +10,15 @@ const parseSupabaseDate = (dateString: string): Date => {
   return new Date(dateString + 'T12:00:00')
 }
 
+// Helper function to convert Date to string safely (avoid timezone issues)
+const dateToSupabaseString = (date: Date): string => {
+  // Use local date parts instead of toISOString() to avoid timezone conversion
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 // ========================================
 // SONG SERVICE
 // ========================================
@@ -229,7 +238,7 @@ export const databaseMemberService = {
       if (updates.availability.length > 0) {
         const availabilityData = updates.availability.map(avail => ({
           member_id: id,
-          date: avail.date.toISOString().split('T')[0],
+          date: dateToSupabaseString(avail.date),
           available: avail.available
         }))
 
@@ -277,7 +286,7 @@ export const databaseMemberService = {
   },
 
   async updateAvailability(memberId: string, date: Date, available: boolean): Promise<void> {
-    const dateString = date.toISOString().split('T')[0];
+    const dateString = dateToSupabaseString(date);
     
     const { error } = await supabase
       .from('member_availability')
@@ -368,7 +377,7 @@ export const databaseScheduleService = {
     const { data, error } = await supabase
       .from('sunday_schedules')
       .insert({
-        date: schedule.date.toISOString().split('T')[0],
+        date: dateToSupabaseString(schedule.date),
         talkback_leader: schedule.leaders.talkback,
         dm1_leader: schedule.leaders.dm1,
         dm2_leader: schedule.leaders.dm2
@@ -399,7 +408,7 @@ export const databaseScheduleService = {
     const updateData: any = {}
     
     if (updates.date !== undefined) {
-      updateData.date = updates.date.toISOString().split('T')[0]
+      updateData.date = dateToSupabaseString(updates.date)
     }
     if (updates.leaders !== undefined) {
       if (updates.leaders.talkback !== undefined) updateData.talkback_leader = updates.leaders.talkback

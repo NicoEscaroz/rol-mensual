@@ -3,6 +3,7 @@ import { SearchIcon, PlusIcon, EditIcon, SaveIcon, XIcon, ChevronLeftIcon, Chevr
 import { Draggable, Droppable } from 'react-beautiful-dnd';
 import { generateSundaysForCurrentAndNext, generateSundaysForMonth, getAdjacentMonths, getMonthInfo } from '../utils/dateUtils';
 import { BandMember, memberService } from '../services/dataService';
+import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 
 interface EditableCell {
   memberId: string;
@@ -39,6 +40,15 @@ export const BandMembers: React.FC = () => {
   const [currentAvailabilityMonth, setCurrentAvailabilityMonth] = useState(() => {
     const now = new Date();
     return { year: now.getFullYear(), month: now.getMonth() };
+  });
+  const [deleteModal, setDeleteModal] = useState<{
+    isOpen: boolean;
+    member: BandMember | null;
+    isLoading: boolean;
+  }>({
+    isOpen: false,
+    member: null,
+    isLoading: false
   });
   const filteredMembers = members.filter(member => {
     const fullName = `${member.firstName} ${member.lastName}`.toLowerCase();
@@ -107,18 +117,30 @@ export const BandMembers: React.FC = () => {
     }
   };
 
-  const deleteMember = async (memberId: string) => {
-    if (confirm('¿Estás seguro de que quieres eliminar este miembro?')) {
-      try {
-        await memberService.delete(memberId);
-        const updatedMembers = await memberService.getAll();
-        setMembers(updatedMembers);
-        if (selectedMember?.id === memberId) {
-          setSelectedMember(null);
-        }
-      } catch (error) {
-        console.error('Error deleting member:', error);
+  const openDeleteModal = (member: BandMember) => {
+    setDeleteModal({ isOpen: true, member, isLoading: false });
+  };
+
+  const closeDeleteModal = () => {
+    setDeleteModal({ isOpen: false, member: null, isLoading: false });
+  };
+
+  const confirmDeleteMember = async () => {
+    if (!deleteModal.member) return;
+
+    setDeleteModal(prev => ({ ...prev, isLoading: true }));
+
+    try {
+      await memberService.delete(deleteModal.member.id);
+      const updatedMembers = await memberService.getAll();
+      setMembers(updatedMembers);
+      if (selectedMember?.id === deleteModal.member.id) {
+        setSelectedMember(null);
       }
+      closeDeleteModal();
+    } catch (error) {
+      console.error('Error deleting member:', error);
+      setDeleteModal(prev => ({ ...prev, isLoading: false }));
     }
   };
 
@@ -334,7 +356,7 @@ export const BandMembers: React.FC = () => {
                   {renderEditableCell(selectedMember, 'firstName', selectedMember.firstName)} {renderEditableCell(selectedMember, 'lastName', selectedMember.lastName)}
                 </h3>
                 <button
-                  onClick={() => deleteMember(selectedMember.id)}
+                  onClick={() => openDeleteModal(selectedMember)}
                   className="p-2 text-red-500 hover:bg-red-100 dark:hover:bg-red-900 rounded"
                   title="Eliminar miembro"
                 >
@@ -482,5 +504,16 @@ export const BandMembers: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={deleteModal.isOpen}
+        title="Eliminar Miembro"
+        message="Esta acción no se puede deshacer. ¿Estás seguro de que quieres eliminar este miembro?"
+        itemName={deleteModal.member ? `${deleteModal.member.firstName} ${deleteModal.member.lastName}` : undefined}
+        onConfirm={confirmDeleteMember}
+        onCancel={closeDeleteModal}
+        isLoading={deleteModal.isLoading}
+      />
     </div>;
 };
