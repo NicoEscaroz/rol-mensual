@@ -4,6 +4,12 @@
 import { supabase } from '../lib/supabase'
 import { Song, BandMember, SundaySchedule } from './dataService'
 
+// Helper function to parse dates correctly from Supabase (avoid timezone issues)
+const parseSupabaseDate = (dateString: string): Date => {
+  // Add T12:00:00 to ensure it's parsed as local date, not UTC
+  return new Date(dateString + 'T12:00:00')
+}
+
 // ========================================
 // SONG SERVICE
 // ========================================
@@ -149,7 +155,7 @@ export const databaseMemberService = {
       lastName: member.last_name,
       instruments: member.instruments || [],
       availability: (member.member_availability || []).map((avail: any) => ({
-        date: new Date(avail.date),
+        date: parseSupabaseDate(avail.date),
         available: avail.available
       }))
     }))
@@ -198,33 +204,28 @@ export const databaseMemberService = {
   },
 
   async update(id: string, updates: Partial<BandMember>): Promise<BandMember | null> {
-    const updateData: any = {}
-    
-    if (updates.firstName !== undefined) updateData.first_name = updates.firstName
-    if (updates.lastName !== undefined) updateData.last_name = updates.lastName
-    if (updates.instruments !== undefined) updateData.instruments = updates.instruments
+    // Only update member data if there are basic field updates
+    if (updates.firstName !== undefined || updates.lastName !== undefined || updates.instruments !== undefined) {
+      const updateData: any = {}
+      
+      if (updates.firstName !== undefined) updateData.first_name = updates.firstName
+      if (updates.lastName !== undefined) updateData.last_name = updates.lastName
+      if (updates.instruments !== undefined) updateData.instruments = updates.instruments
 
-    const { data, error } = await supabase
-      .from('band_members')
-      .update(updateData)
-      .eq('id', id)
-      .select()
-      .single()
+      const { error } = await supabase
+        .from('band_members')
+        .update(updateData)
+        .eq('id', id)
 
-    if (error) {
-      console.error('Error updating member:', error)
-      throw error
+      if (error) {
+        console.error('Error updating member:', error)
+        throw error
+      }
     }
 
     // Update availability if provided
     if (updates.availability) {
-      // Delete existing availability
-      await supabase
-        .from('member_availability')
-        .delete()
-        .eq('member_id', id)
-
-      // Insert new availability
+      // Use upsert for availability to handle existing records
       if (updates.availability.length > 0) {
         const availabilityData = updates.availability.map(avail => ({
           member_id: id,
@@ -232,18 +233,65 @@ export const databaseMemberService = {
           available: avail.available
         }))
 
-        await supabase
+        const { error: upsertError } = await supabase
           .from('member_availability')
-          .insert(availabilityData)
+          .upsert(availabilityData, { 
+            onConflict: 'member_id,date' 
+          })
+
+        if (upsertError) {
+          console.error('Error upserting availability:', upsertError)
+          throw upsertError
+        }
       }
     }
 
+    // Get the updated member with availability
+    const { data: member, error: fetchError } = await supabase
+      .from('band_members')
+      .select(`
+        *,
+        member_availability (
+          date,
+          available
+        )
+      `)
+      .eq('id', id)
+      .single()
+
+    if (fetchError) {
+      console.error('Error fetching updated member:', fetchError)
+      throw fetchError
+    }
+
     return {
-      id: data.id,
-      firstName: data.first_name,
-      lastName: data.last_name,
-      instruments: data.instruments || [],
-      availability: updates.availability || []
+      id: member.id,
+      firstName: member.first_name,
+      lastName: member.last_name,
+      instruments: member.instruments || [],
+      availability: (member.member_availability || []).map((avail: any) => ({
+        date: parseSupabaseDate(avail.date),
+        available: avail.available
+      }))
+    }
+  },
+
+  async updateAvailability(memberId: string, date: Date, available: boolean): Promise<void> {
+    const dateString = date.toISOString().split('T')[0];
+    
+    const { error } = await supabase
+      .from('member_availability')
+      .upsert({
+        member_id: memberId,
+        date: dateString,
+        available: available
+      }, { 
+        onConflict: 'member_id,date' 
+      })
+
+    if (error) {
+      console.error('Error updating individual availability:', error)
+      throw error
     }
   },
 
@@ -288,7 +336,7 @@ export const databaseScheduleService = {
 
     return (schedules || []).map(schedule => ({
       id: schedule.id,
-      date: new Date(schedule.date),
+      date: parseSupabaseDate(schedule.date),
       songs: (schedule.schedule_songs || [])
         .sort((a: any, b: any) => a.order_index - b.order_index)
         .map((scheduleSong: any) => ({
@@ -335,7 +383,7 @@ export const databaseScheduleService = {
 
     return {
       id: data.id,
-      date: new Date(data.date),
+      date: parseSupabaseDate(data.date),
       songs: [],
       band: [],
       leaders: {

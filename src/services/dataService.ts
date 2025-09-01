@@ -294,6 +294,30 @@ export const memberService = {
       return true;
     }
     return localMemberService.delete(id);
+  },
+
+  async updateAvailability(memberId: string, date: Date, available: boolean): Promise<void> {
+    if (isDatabaseMode) {
+      await databaseMemberService.updateAvailability(memberId, date, available);
+    } else {
+      // For local storage, we need to update the whole member
+      const member = localMemberService.getAll().find(m => m.id === memberId);
+      if (member) {
+        const existingIndex = member.availability.findIndex(avail => 
+          avail.date.toDateString() === date.toDateString()
+        );
+
+        const newAvailability = [...member.availability];
+        
+        if (existingIndex >= 0) {
+          newAvailability[existingIndex] = { date, available };
+        } else {
+          newAvailability.push({ date, available });
+        }
+
+        localMemberService.update(memberId, { availability: newAvailability });
+      }
+    }
   }
 };
 

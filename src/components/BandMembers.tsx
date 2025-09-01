@@ -25,22 +25,7 @@ export const BandMembers: React.FC = () => {
     const loadData = async () => {
       try {
         const loadedMembers = await memberService.getAll();
-        // Initialize availability for members if not set
-        const sundays = generateSundaysForCurrentAndNext();
-        const membersWithAvailability = loadedMembers.map(member => ({
-          ...member,
-          availability: member.availability.length > 0 ? member.availability : 
-            sundays.map(date => ({ date, available: true }))
-        }));
-        
-        if (membersWithAvailability.length !== loadedMembers.length || 
-            membersWithAvailability.some((m, i) => m.availability.length !== loadedMembers[i].availability.length)) {
-          for (const member of membersWithAvailability) {
-            await memberService.update(member.id, member);
-          }
-        }
-        
-        setMembers(membersWithAvailability);
+        setMembers(loadedMembers);
       } catch (error) {
         console.error('Error loading members:', error);
         setMembers([]);
@@ -106,14 +91,8 @@ export const BandMembers: React.FC = () => {
   };
 
   const createMember = async () => {
-    const sundays = generateSundaysForCurrentAndNext();
-    const memberWithAvailability = {
-      ...newMember,
-      availability: sundays.map(date => ({ date, available: true }))
-    };
-    
     try {
-      await memberService.create(memberWithAvailability);
+      await memberService.create(newMember);
       const updatedMembers = await memberService.getAll();
       setMembers(updatedMembers);
       setShowCreateModal(false);
@@ -164,9 +143,13 @@ export const BandMembers: React.FC = () => {
   const getMemberAvailabilityForCurrentMonth = (member: BandMember) => {
     const currentMonthSundays = getCurrentMonthSundays();
     return currentMonthSundays.map(sunday => {
-      const existingAvailability = member.availability.find(avail => 
-        avail.date.toDateString() === sunday.toDateString()
-      );
+      const existingAvailability = member.availability.find(avail => {
+        const availDate = new Date(avail.date).toISOString().split('T')[0];
+        const sundayDate = new Date(sunday).toISOString().split('T')[0];
+        return availDate === sundayDate;
+      });
+      // If no availability record exists, default to true (available)
+      // This ensures consistency with how we initialize new members
       return existingAvailability || { date: sunday, available: true };
     });
   };
@@ -175,38 +158,78 @@ export const BandMembers: React.FC = () => {
     const member = members.find(m => m.id === memberId);
     if (!member) return;
 
-    // Find existing availability or create new one
-    const existingIndex = member.availability.findIndex(avail => 
-      avail.date.toDateString() === date.toDateString()
-    );
+    // Find existing availability or determine new state
+    const existingAvailability = member.availability.find(avail => {
+      // More robust date comparison using ISO date strings
+      const availDate = new Date(avail.date).toISOString().split('T')[0];
+      const targetDate = new Date(date).toISOString().split('T')[0];
+      return availDate === targetDate;
+    });
 
-    let newAvailability = [...member.availability];
-    
-    if (existingIndex >= 0) {
-      // Update existing availability
-      newAvailability[existingIndex] = {
-        ...newAvailability[existingIndex],
-        available: !newAvailability[existingIndex].available
-      };
-    } else {
-      // Add new availability
-      newAvailability.push({
-        date: date,
-        available: false // If it didn't exist, we're toggling it to false
-      });
+    // If no availability record exists, we assume it was true (default state)
+    // So we toggle from true to false
+    const currentAvailable = existingAvailability ? existingAvailability.available : true;
+    const newAvailable = !currentAvailable;
+
+
+
+    // Optimistic update - update UI immediately
+    const optimisticUpdateMembers = members.map(m => {
+      if (m.id === memberId) {
+        const updatedAvailability = [...m.availability];
+        const existingIndex = updatedAvailability.findIndex(avail => {
+          const availDate = new Date(avail.date).toISOString().split('T')[0];
+          const targetDate = new Date(date).toISOString().split('T')[0];
+          return availDate === targetDate;
+        });
+
+        if (existingIndex >= 0) {
+          updatedAvailability[existingIndex] = { date, available: newAvailable };
+        } else {
+          updatedAvailability.push({ date, available: newAvailable });
+        }
+
+        return { ...m, availability: updatedAvailability };
+      }
+      return m;
+    });
+
+    setMembers(optimisticUpdateMembers);
+
+    // Update selected member optimistically too
+    if (selectedMember?.id === memberId) {
+      const optimisticSelectedMember = optimisticUpdateMembers.find(m => m.id === memberId);
+      if (optimisticSelectedMember) {
+        setSelectedMember(optimisticSelectedMember);
+      }
     }
 
     try {
-      const updatedMember = await memberService.update(memberId, { availability: newAvailability });
-      if (updatedMember) {
-        const updatedMembers = await memberService.getAll();
-        setMembers(updatedMembers);
-        if (selectedMember?.id === memberId) {
+      // Update only this specific availability record
+      await memberService.updateAvailability(memberId, date, newAvailable);
+      
+      // Refresh the members list to get updated data from server
+      const updatedMembers = await memberService.getAll();
+      setMembers(updatedMembers);
+      
+      // Update selected member if it's the one being modified
+      if (selectedMember?.id === memberId) {
+        const updatedMember = updatedMembers.find(m => m.id === memberId);
+        if (updatedMember) {
           setSelectedMember(updatedMember);
         }
       }
     } catch (error) {
       console.error('Error updating member availability:', error);
+      // Revert optimistic update on error
+      const revertedMembers = await memberService.getAll();
+      setMembers(revertedMembers);
+      if (selectedMember?.id === memberId) {
+        const revertedMember = revertedMembers.find(m => m.id === memberId);
+        if (revertedMember) {
+          setSelectedMember(revertedMember);
+        }
+      }
     }
   };
 
