@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { SearchIcon, FilterIcon, PlusIcon, EditIcon, SaveIcon, XIcon, TrashIcon } from 'lucide-react';
-import { Draggable, Droppable } from 'react-beautiful-dnd';
+import { DragDropContext, Draggable, Droppable, DropResult } from 'react-beautiful-dnd';
 import { Song, songService } from '../services/dataService';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 
@@ -141,6 +141,41 @@ export const SongBank: React.FC = () => {
     }
   };
 
+  const handleDragEnd = async (result: DropResult) => {
+    if (!result.destination || result.destination.index === result.source.index) {
+      return;
+    }
+
+    const newSongs = Array.from(filteredSongs);
+    const [reorderedSong] = newSongs.splice(result.source.index, 1);
+    newSongs.splice(result.destination.index, 0, reorderedSong);
+
+    // Update songs state optimistically
+    setSongs(prevSongs => {
+      const allSongs = [...prevSongs];
+      const filteredIds = new Set(filteredSongs.map(s => s.id));
+      const nonFilteredSongs = allSongs.filter(s => !filteredIds.has(s.id));
+      
+      // Assign new orders to the reordered filtered songs
+      const reorderedWithOrder = newSongs.map((song, index) => ({ ...song, order: index }));
+      
+      // Combine filtered and non-filtered songs
+      const combinedSongs = [...reorderedWithOrder, ...nonFilteredSongs];
+      return combinedSongs;
+    });
+
+    try {
+      // Save the new order to the service
+      const reorderedIds = newSongs.map(song => song.id);
+      await songService.reorder(reorderedIds);
+    } catch (error) {
+      console.error('Error reordering songs:', error);
+      // Reload songs to revert optimistic update
+      const loadedSongs = await songService.getAll();
+      setSongs(loadedSongs);
+    }
+  };
+
   const renderEditableCell = (song: Song, field: keyof Song, value: any) => {
     const isEditing = editingCell?.songId === song.id && editingCell?.field === field;
     
@@ -211,46 +246,48 @@ export const SongBank: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="bg-white dark:bg-gray-800 rounded-md shadow-sm overflow-hidden border border-gray-200 dark:border-gray-700">
           <div className="max-h-[500px] overflow-y-auto">
-            <Droppable droppableId="songs-list" isDropDisabled={true}>
-              {(provided) => (
-                <table className="w-full" {...provided.droppableProps} ref={provided.innerRef}>
-                  <thead className="bg-gray-100 dark:bg-gray-700 sticky top-0">
-                    <tr>
-                      <th className="p-3 text-left">Nombre</th>
-                      <th className="p-3 text-left">Tono</th>
-                      <th className="p-3 text-left">Categoría</th>
-                      <th className="p-3 text-left">Duración</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredSongs.map((song, index) => (
-                      <Draggable key={song.id} draggableId={`song-${song.id}`} index={index}>
-                        {(provided, snapshot) => (
-                          <tr 
-                            ref={provided.innerRef}
-                            {...provided.draggableProps}
-                            {...provided.dragHandleProps}
-                            className={`border-b border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-900 
-                              ${selectedSong?.id === song.id ? 'bg-gray-100 dark:bg-gray-700' : ''}
-                              ${snapshot.isDragging ? 'bg-blue-50 dark:bg-blue-900 shadow-lg' : ''}`}
-                            onClick={() => setSelectedSong(song)}
-                          >
-                            <td className="p-3">{song.name}</td>
-                            <td className="p-3">{song.currentKey}</td>
-                            <td className="p-3 capitalize">{song.category}</td>
-                            <td className="p-3">
-                              {Math.floor(song.duration / 60)}:
-                              {(song.duration % 60).toString().padStart(2, '0')}
-                            </td>
-                          </tr>
-                        )}
-                      </Draggable>
-                    ))}
-                    {provided.placeholder}
-                  </tbody>
-                </table>
-              )}
-            </Droppable>
+            <DragDropContext onDragEnd={handleDragEnd}>
+              <Droppable droppableId="songs-list">
+                {(provided) => (
+                  <table className="w-full" {...provided.droppableProps} ref={provided.innerRef}>
+                    <thead className="bg-gray-100 dark:bg-gray-700 sticky top-0">
+                      <tr>
+                        <th className="p-3 text-left">Nombre</th>
+                        <th className="p-3 text-left">Tono</th>
+                        <th className="p-3 text-left">Categoría</th>
+                        <th className="p-3 text-left">Duración</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredSongs.map((song, index) => (
+                        <Draggable key={song.id} draggableId={`song-${song.id}`} index={index}>
+                          {(provided, snapshot) => (
+                            <tr 
+                              ref={provided.innerRef}
+                              {...provided.draggableProps}
+                              {...provided.dragHandleProps}
+                              className={`border-b border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-900 
+                                ${selectedSong?.id === song.id ? 'bg-gray-100 dark:bg-gray-700' : ''}
+                                ${snapshot.isDragging ? 'bg-blue-50 dark:bg-blue-900 shadow-lg' : ''}`}
+                              onClick={() => setSelectedSong(song)}
+                            >
+                              <td className="p-3">{song.name}</td>
+                              <td className="p-3">{song.currentKey}</td>
+                              <td className="p-3 capitalize">{song.category}</td>
+                              <td className="p-3">
+                                {Math.floor(song.duration / 60)}:
+                                {(song.duration % 60).toString().padStart(2, '0')}
+                              </td>
+                            </tr>
+                          )}
+                        </Draggable>
+                      ))}
+                      {provided.placeholder}
+                    </tbody>
+                  </table>
+                )}
+              </Droppable>
+            </DragDropContext>
           </div>
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-md shadow-sm p-4 border border-gray-200 dark:border-gray-700">

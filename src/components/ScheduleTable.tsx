@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { DownloadIcon, PlusIcon, TrashIcon, SearchIcon, FilterIcon, XIcon, MinusIcon } from 'lucide-react';
-import { Droppable, Draggable } from 'react-beautiful-dnd';
+import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd';
 import { generateSundays, groupSchedulesByMonth } from '../utils/dateUtils';
 import { SundaySchedule, scheduleService, Song, BandMember, songService, memberService } from '../services/dataService';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
@@ -108,11 +108,71 @@ export const ScheduleTable: React.FC = () => {
     return matchesSearch && matchesInstrument;
   });
 
-  const handleDrop = async (result: any) => {
+  const handleDrop = async (result: DropResult) => {
     const { source, destination, draggableId } = result;
     
     if (!destination) return;
+
+    // Handle reordering within schedule lists
+    if (draggableId.startsWith('schedule-song-') || draggableId.startsWith('schedule-member-')) {
+      const sourceScheduleId = source.droppableId.replace('schedule-', '').replace('-songs', '').replace('-band', '');
+      const destScheduleId = destination.droppableId.replace('schedule-', '').replace('-songs', '').replace('-band', '');
+      
+      // Only handle reordering within the same schedule for now
+      if (sourceScheduleId !== destScheduleId) return;
+      
+      const schedule = schedules.find(s => s.id === sourceScheduleId);
+      if (!schedule) return;
+
+      if (draggableId.startsWith('schedule-song-')) {
+        // Reorder songs within schedule
+        const newSongs = Array.from(schedule.songs);
+        const [reorderedSong] = newSongs.splice(source.index, 1);
+        newSongs.splice(destination.index, 0, reorderedSong);
+        
+        // Update order numbers
+        const updatedSongs = newSongs.map((song, index) => ({
+          ...song,
+          order: index + 1
+        }));
+
+        try {
+          await scheduleService.update(sourceScheduleId, {
+            songs: updatedSongs
+          });
+          
+          const updatedSchedules = await scheduleService.getAll();
+          setSchedules(updatedSchedules);
+        } catch (error) {
+          console.error('Error reordering songs:', error);
+        }
+      } else if (draggableId.startsWith('schedule-member-')) {
+        // Reorder band members within schedule
+        const newBand = Array.from(schedule.band);
+        const [reorderedMember] = newBand.splice(source.index, 1);
+        newBand.splice(destination.index, 0, reorderedMember);
+        
+        // Update order numbers
+        const updatedBand = newBand.map((member, index) => ({
+          ...member,
+          order: index + 1
+        }));
+
+        try {
+          await scheduleService.update(sourceScheduleId, {
+            band: updatedBand
+          });
+          
+          const updatedSchedules = await scheduleService.getAll();
+          setSchedules(updatedSchedules);
+        } catch (error) {
+          console.error('Error reordering band members:', error);
+        }
+      }
+      return;
+    }
     
+    // Handle adding new items to schedule
     const scheduleId = destination.droppableId.replace('schedule-', '').replace('-songs', '').replace('-band', '');
     const schedule = schedules.find(s => s.id === scheduleId);
     if (!schedule) return;
@@ -120,11 +180,14 @@ export const ScheduleTable: React.FC = () => {
     if (draggableId.startsWith('song-')) {
       // Handle song drop
       const songId = draggableId.replace('song-', '');
+      const song = availableSongs.find(s => s.id === songId);
+      if (!song) return;
+
       const newSong = {
         id: songId,
         scheduleItemId: Date.now().toString(),
-        name: '', // Will be filled by the parent component that has access to songs
-        key: '',
+        name: song.name,
+        key: song.currentKey,
         singer: '',
         order: schedule.songs.length + 1
       };
@@ -142,10 +205,10 @@ export const ScheduleTable: React.FC = () => {
     } else if (draggableId.startsWith('member-')) {
       // Handle member drop - show instrument selection modal
       const memberId = draggableId.replace('member-', '');
-      // This will be handled by the parent component that has access to members
+      const member = availableMembers.find(m => m.id === memberId);
       setInstrumentModal({
         show: true,
-        member: null, // Will be set by parent
+        member: member || null,
         scheduleId
       });
     }
@@ -158,7 +221,7 @@ export const ScheduleTable: React.FC = () => {
     const newBandMember = {
       id: member.id,
       scheduleItemId: Date.now().toString(),
-      name: `${member.firstName} ${member.lastName}`,
+      name: member.firstName, // Solo el nombre, sin apellido en el programa dominical
       instrument,
       order: schedule.band.length + 1
     };
@@ -366,7 +429,7 @@ export const ScheduleTable: React.FC = () => {
     const newBandMember = {
       id: member.id,
       scheduleItemId: Date.now().toString(),
-      name: `${member.firstName} ${member.lastName}`,
+      name: member.firstName, // Solo el nombre, sin apellido en el programa dominical
       instrument,
       order: schedule.band.length + 1
     };
@@ -409,6 +472,7 @@ export const ScheduleTable: React.FC = () => {
           Exportar PDF
         </button>
       </div>
+      <DragDropContext onDragEnd={handleDrop}>
       <div className="space-y-4">
         {Object.entries(groupSchedulesByMonth(schedules)).map(([monthKey, monthSchedules]) => {
           const isCollapsed = collapsedMonths.has(monthKey);
@@ -506,8 +570,8 @@ export const ScheduleTable: React.FC = () => {
                                             member.instrument === 'VOX3' || 
                                             member.instrument === 'VOX4'
                                           ).map(member => (
-                                            <option key={member.scheduleItemId} value={member.name}>
-                                              {member.name} ({member.instrument})
+                                            <option key={member.scheduleItemId} value={member.name.split(' ')[0]}>
+                                              {member.name.split(' ')[0]} ({member.instrument})
                                             </option>
                                           ))}
                                         </select>
@@ -580,7 +644,7 @@ export const ScheduleTable: React.FC = () => {
                                   >
                                     <div className="flex justify-between items-center">
                                       <span>
-                            {member.name} ({member.instrument})
+                            {member.name.split(' ')[0]} ({member.instrument})
                                       </span>
                                       <button
                                         onClick={(e) => {
@@ -838,6 +902,8 @@ export const ScheduleTable: React.FC = () => {
         </div>
       )}
 
+      </DragDropContext>
+
       {/* Delete Confirmation Modal */}
       <ConfirmDeleteModal
         isOpen={deleteModal.isOpen}
@@ -848,5 +914,5 @@ export const ScheduleTable: React.FC = () => {
         onCancel={closeDeleteModal}
         isLoading={deleteModal.isLoading}
       />
-    </div>;
+    </div>
 };

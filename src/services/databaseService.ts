@@ -27,6 +27,7 @@ export const databaseSongService = {
     const { data, error } = await supabase
       .from('songs')
       .select('*')
+      .order('order_index', { nullsFirst: false })
       .order('name')
 
     if (error) {
@@ -44,7 +45,8 @@ export const databaseSongService = {
       lyrics: song.lyrics || '',
       verses: song.verses || '',
       duration: song.duration,
-      category: song.category
+      category: song.category,
+      order: song.order_index
     }))
   },
 
@@ -60,7 +62,8 @@ export const databaseSongService = {
         lyrics: song.lyrics,
         verses: song.verses,
         duration: song.duration,
-        category: song.category
+        category: song.category,
+        order_index: song.order
       })
       .select()
       .single()
@@ -80,7 +83,8 @@ export const databaseSongService = {
       lyrics: data.lyrics || '',
       verses: data.verses || '',
       duration: data.duration,
-      category: data.category
+      category: data.category,
+      order: data.order_index
     }
   },
 
@@ -96,6 +100,7 @@ export const databaseSongService = {
     if (updates.verses !== undefined) updateData.verses = updates.verses
     if (updates.duration !== undefined) updateData.duration = updates.duration
     if (updates.category !== undefined) updateData.category = updates.category
+    if (updates.order !== undefined) updateData.order_index = updates.order
 
     const { data, error } = await supabase
       .from('songs')
@@ -119,7 +124,8 @@ export const databaseSongService = {
       lyrics: data.lyrics || '',
       verses: data.verses || '',
       duration: data.duration,
-      category: data.category
+      category: data.category,
+      order: data.order_index
     }
   },
 
@@ -133,6 +139,29 @@ export const databaseSongService = {
       console.error('Error deleting song:', error)
       throw error
     }
+  },
+
+  async reorder(songIds: string[]): Promise<Song[]> {
+    // Update order_index for each song
+    const updates = songIds.map((songId, index) => ({
+      id: songId,
+      order_index: index
+    }));
+
+    for (const update of updates) {
+      const { error } = await supabase
+        .from('songs')
+        .update({ order_index: update.order_index })
+        .eq('id', update.id);
+
+      if (error) {
+        console.error('Error updating song order:', error);
+        throw error;
+      }
+    }
+
+    // Return updated songs list
+    return await this.getAll();
   }
 }
 
@@ -151,6 +180,7 @@ export const databaseMemberService = {
           available
         )
       `)
+      .order('order_index', { nullsFirst: false })
       .order('first_name')
 
     if (memberError) {
@@ -166,7 +196,8 @@ export const databaseMemberService = {
       availability: (member.member_availability || []).map((avail: any) => ({
         date: parseSupabaseDate(avail.date),
         available: avail.available
-      }))
+      })),
+      order: member.order_index
     }))
   },
 
@@ -176,7 +207,8 @@ export const databaseMemberService = {
       .insert({
         first_name: member.firstName,
         last_name: member.lastName,
-        instruments: member.instruments
+        instruments: member.instruments,
+        order_index: member.order
       })
       .select()
       .single()
@@ -208,18 +240,20 @@ export const databaseMemberService = {
       firstName: data.first_name,
       lastName: data.last_name,
       instruments: data.instruments || [],
-      availability: member.availability || []
+      availability: member.availability || [],
+      order: data.order_index
     }
   },
 
   async update(id: string, updates: Partial<BandMember>): Promise<BandMember | null> {
     // Only update member data if there are basic field updates
-    if (updates.firstName !== undefined || updates.lastName !== undefined || updates.instruments !== undefined) {
+    if (updates.firstName !== undefined || updates.lastName !== undefined || updates.instruments !== undefined || updates.order !== undefined) {
       const updateData: any = {}
       
       if (updates.firstName !== undefined) updateData.first_name = updates.firstName
       if (updates.lastName !== undefined) updateData.last_name = updates.lastName
       if (updates.instruments !== undefined) updateData.instruments = updates.instruments
+      if (updates.order !== undefined) updateData.order_index = updates.order
 
       const { error } = await supabase
         .from('band_members')
@@ -281,7 +315,8 @@ export const databaseMemberService = {
       availability: (member.member_availability || []).map((avail: any) => ({
         date: parseSupabaseDate(avail.date),
         available: avail.available
-      }))
+      })),
+      order: member.order_index
     }
   },
 
@@ -314,6 +349,29 @@ export const databaseMemberService = {
       console.error('Error deleting member:', error)
       throw error
     }
+  },
+
+  async reorder(memberIds: string[]): Promise<BandMember[]> {
+    // Update order_index for each member
+    const updates = memberIds.map((memberId, index) => ({
+      id: memberId,
+      order_index: index
+    }));
+
+    for (const update of updates) {
+      const { error } = await supabase
+        .from('band_members')
+        .update({ order_index: update.order_index })
+        .eq('id', update.id);
+
+      if (error) {
+        console.error('Error updating member order:', error);
+        throw error;
+      }
+    }
+
+    // Return updated members list
+    return await this.getAll();
   }
 }
 

@@ -17,6 +17,7 @@ export interface Song {
   verses: string; // Biblical verses the song talks about
   duration: number;
   category: 'worship' | 'praise' | 'hymn' | 'special';
+  order?: number; // Custom order for drag and drop
 }
 
 export interface BandMember {
@@ -28,6 +29,7 @@ export interface BandMember {
     date: Date;
     available: boolean;
   }[];
+  order?: number; // Custom order for drag and drop
 }
 
 export interface SundaySchedule {
@@ -142,7 +144,16 @@ const defaultMembers: BandMember[] = [
 const localSongService = {
   getAll(): Song[] {
     const stored = localStorage.getItem(SONGS_STORAGE_KEY);
-    return stored ? JSON.parse(stored) : defaultSongs;
+    const songs = stored ? JSON.parse(stored) : defaultSongs;
+    // Sort by order if available, otherwise by name
+    return songs.sort((a: Song, b: Song) => {
+      if (a.order !== undefined && b.order !== undefined) {
+        return a.order - b.order;
+      }
+      if (a.order !== undefined) return -1;
+      if (b.order !== undefined) return 1;
+      return a.name.localeCompare(b.name);
+    });
   },
 
   save(songs: Song[]): void {
@@ -177,6 +188,27 @@ const localSongService = {
     
     this.save(filtered);
     return true;
+  },
+
+  reorder(songIds: string[]): Song[] {
+    const songs = this.getAll();
+    const reorderedSongs: Song[] = [];
+    
+    songIds.forEach((id, index) => {
+      const song = songs.find(s => s.id === id);
+      if (song) {
+        reorderedSongs.push({ ...song, order: index });
+      }
+    });
+    
+    // Add any songs that weren't in the reorder list at the end
+    const reorderedIds = new Set(songIds);
+    const remainingSongs = songs.filter(s => !reorderedIds.has(s.id))
+      .map((song, index) => ({ ...song, order: reorderedSongs.length + index }));
+    
+    const allSongs = [...reorderedSongs, ...remainingSongs];
+    this.save(allSongs);
+    return allSongs;
   }
 };
 
@@ -209,6 +241,13 @@ export const songService = {
       return true;
     }
     return localSongService.delete(id);
+  },
+
+  async reorder(songIds: string[]): Promise<Song[]> {
+    if (isDatabaseMode) {
+      return await databaseSongService.reorder(songIds);
+    }
+    return localSongService.reorder(songIds);
   }
 };
 
@@ -216,10 +255,11 @@ export const songService = {
 const localMemberService = {
   getAll(): BandMember[] {
     const stored = localStorage.getItem(MEMBERS_STORAGE_KEY);
+    let members = defaultMembers;
     if (stored) {
-      const members = JSON.parse(stored);
+      const parsedMembers = JSON.parse(stored);
       // Convert date strings back to Date objects
-      return members.map((member: BandMember & { availability: Array<{ date: string; available: boolean }> }) => ({
+      members = parsedMembers.map((member: BandMember & { availability: Array<{ date: string; available: boolean }> }) => ({
         ...member,
         availability: member.availability.map((a: { date: string; available: boolean }) => ({
           ...a,
@@ -227,7 +267,15 @@ const localMemberService = {
         }))
       }));
     }
-    return defaultMembers;
+    // Sort by order if available, otherwise by name
+    return members.sort((a: BandMember, b: BandMember) => {
+      if (a.order !== undefined && b.order !== undefined) {
+        return a.order - b.order;
+      }
+      if (a.order !== undefined) return -1;
+      if (b.order !== undefined) return 1;
+      return a.firstName.localeCompare(b.firstName);
+    });
   },
 
   save(members: BandMember[]): void {
@@ -262,6 +310,27 @@ const localMemberService = {
     
     this.save(filtered);
     return true;
+  },
+
+  reorder(memberIds: string[]): BandMember[] {
+    const members = this.getAll();
+    const reorderedMembers: BandMember[] = [];
+    
+    memberIds.forEach((id, index) => {
+      const member = members.find(m => m.id === id);
+      if (member) {
+        reorderedMembers.push({ ...member, order: index });
+      }
+    });
+    
+    // Add any members that weren't in the reorder list at the end
+    const reorderedIds = new Set(memberIds);
+    const remainingMembers = members.filter(m => !reorderedIds.has(m.id))
+      .map((member, index) => ({ ...member, order: reorderedMembers.length + index }));
+    
+    const allMembers = [...reorderedMembers, ...remainingMembers];
+    this.save(allMembers);
+    return allMembers;
   }
 };
 
@@ -318,6 +387,13 @@ export const memberService = {
         localMemberService.update(memberId, { availability: newAvailability });
       }
     }
+  },
+
+  async reorder(memberIds: string[]): Promise<BandMember[]> {
+    if (isDatabaseMode) {
+      return await databaseMemberService.reorder(memberIds);
+    }
+    return localMemberService.reorder(memberIds);
   }
 };
 

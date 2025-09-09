@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { SearchIcon, PlusIcon, EditIcon, SaveIcon, XIcon, ChevronLeftIcon, ChevronRightIcon, TrashIcon } from 'lucide-react';
-import { Draggable, Droppable } from 'react-beautiful-dnd';
-import { generateSundaysForCurrentAndNext, generateSundaysForMonth, getAdjacentMonths, getMonthInfo } from '../utils/dateUtils';
+import { DragDropContext, Draggable, Droppable, DropResult } from 'react-beautiful-dnd';
+import { generateSundaysForMonth, getMonthInfo } from '../utils/dateUtils';
 import { BandMember, memberService } from '../services/dataService';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 
@@ -255,6 +255,41 @@ export const BandMembers: React.FC = () => {
     }
   };
 
+  const handleDragEnd = async (result: DropResult) => {
+    if (!result.destination || result.destination.index === result.source.index) {
+      return;
+    }
+
+    const newMembers = Array.from(filteredMembers);
+    const [reorderedMember] = newMembers.splice(result.source.index, 1);
+    newMembers.splice(result.destination.index, 0, reorderedMember);
+
+    // Update members state optimistically
+    setMembers(prevMembers => {
+      const allMembers = [...prevMembers];
+      const filteredIds = new Set(filteredMembers.map(m => m.id));
+      const nonFilteredMembers = allMembers.filter(m => !filteredIds.has(m.id));
+      
+      // Assign new orders to the reordered filtered members
+      const reorderedWithOrder = newMembers.map((member, index) => ({ ...member, order: index }));
+      
+      // Combine filtered and non-filtered members
+      const combinedMembers = [...reorderedWithOrder, ...nonFilteredMembers];
+      return combinedMembers;
+    });
+
+    try {
+      // Save the new order to the service
+      const reorderedIds = newMembers.map(member => member.id);
+      await memberService.reorder(reorderedIds);
+    } catch (error) {
+      console.error('Error reordering members:', error);
+      // Reload members to revert optimistic update
+      const loadedMembers = await memberService.getAll();
+      setMembers(loadedMembers);
+    }
+  };
+
   const renderEditableCell = (member: BandMember, field: keyof BandMember, value: any) => {
     const isEditing = editingCell?.memberId === member.id && editingCell?.field === field;
     
@@ -312,41 +347,43 @@ export const BandMembers: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="bg-white dark:bg-gray-800 rounded-md shadow-sm overflow-hidden border border-gray-200 dark:border-gray-700">
           <div className="max-h-[500px] overflow-y-auto">
-            <Droppable droppableId="members-list" isDropDisabled={true}>
-              {(provided) => (
-                <table className="w-full" {...provided.droppableProps} ref={provided.innerRef}>
-                  <thead className="bg-gray-100 dark:bg-gray-700 sticky top-0">
-                    <tr>
-                      <th className="p-3 text-left">Nombre</th>
-                      <th className="p-3 text-left">Instrumentos</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredMembers.map((member, index) => (
-                      <Draggable key={member.id} draggableId={`member-${member.id}`} index={index}>
-                        {(provided, snapshot) => (
-                          <tr 
-                            ref={provided.innerRef}
-                            {...provided.draggableProps}
-                            {...provided.dragHandleProps}
-                            className={`border-b border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-900 
-                              ${selectedMember?.id === member.id ? 'bg-gray-100 dark:bg-gray-700' : ''}
-                              ${snapshot.isDragging ? 'bg-blue-50 dark:bg-blue-900 shadow-lg' : ''}`}
-                            onClick={() => setSelectedMember(member)}
-                          >
-                            <td className="p-3">
-                              {member.firstName} {member.lastName}
-                            </td>
-                            <td className="p-3">{member.instruments.join(', ')}</td>
-                          </tr>
-                        )}
-                      </Draggable>
-                    ))}
-                    {provided.placeholder}
-                  </tbody>
-                </table>
-              )}
-            </Droppable>
+            <DragDropContext onDragEnd={handleDragEnd}>
+              <Droppable droppableId="members-list">
+                {(provided) => (
+                  <table className="w-full" {...provided.droppableProps} ref={provided.innerRef}>
+                    <thead className="bg-gray-100 dark:bg-gray-700 sticky top-0">
+                      <tr>
+                        <th className="p-3 text-left">Nombre</th>
+                        <th className="p-3 text-left">Instrumentos</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredMembers.map((member, index) => (
+                        <Draggable key={member.id} draggableId={`member-${member.id}`} index={index}>
+                          {(provided, snapshot) => (
+                            <tr 
+                              ref={provided.innerRef}
+                              {...provided.draggableProps}
+                              {...provided.dragHandleProps}
+                              className={`border-b border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-900 
+                                ${selectedMember?.id === member.id ? 'bg-gray-100 dark:bg-gray-700' : ''}
+                                ${snapshot.isDragging ? 'bg-blue-50 dark:bg-blue-900 shadow-lg' : ''}`}
+                              onClick={() => setSelectedMember(member)}
+                            >
+                              <td className="p-3">
+                                {member.firstName} {member.lastName}
+                              </td>
+                              <td className="p-3">{member.instruments.join(', ')}</td>
+                            </tr>
+                          )}
+                        </Draggable>
+                      ))}
+                      {provided.placeholder}
+                    </tbody>
+                  </table>
+                )}
+              </Droppable>
+            </DragDropContext>
           </div>
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-md shadow-sm p-4 border border-gray-200 dark:border-gray-700">
