@@ -27,7 +27,7 @@ export interface BandMember {
   instruments: string[];
   availability: {
     date: Date;
-    available: boolean;
+    available: boolean | null;
   }[];
   order?: number; // Custom order for drag and drop
 }

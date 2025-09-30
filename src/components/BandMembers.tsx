@@ -170,9 +170,9 @@ export const BandMembers: React.FC = () => {
         const sundayDate = new Date(sunday).toISOString().split('T')[0];
         return availDate === sundayDate;
       });
-      // If no availability record exists, default to true (available)
-      // This ensures consistency with how we initialize new members
-      return existingAvailability || { date: sunday, available: true };
+      // Return existing availability record if it exists, 
+      // otherwise return null to indicate no preference has been set
+      return existingAvailability || { date: sunday, available: null };
     });
   };
 
@@ -188,10 +188,14 @@ export const BandMembers: React.FC = () => {
       return availDate === targetDate;
     });
 
-    // If no availability record exists, we assume it was true (default state)
-    // So we toggle from true to false
-    const currentAvailable = existingAvailability ? existingAvailability.available : true;
-    const newAvailable = !currentAvailable;
+    // If no availability record exists, start with true when first clicked
+    // Cycle: null -> true -> false -> true -> false...
+    let newAvailable: boolean;
+    if (!existingAvailability) {
+      newAvailable = true; // First click sets to available
+    } else {
+      newAvailable = !existingAvailability.available; // Toggle existing state
+    }
 
 
 
@@ -434,23 +438,42 @@ export const BandMembers: React.FC = () => {
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
-                  {getMemberAvailabilityForCurrentMonth(selectedMember).map((item, index) => (
-                    <label key={index} className="flex items-center p-2 border border-gray-200 dark:border-gray-700 rounded-md cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-900">
-                      <input 
-                        type="checkbox" 
-                        className="mr-2" 
-                        checked={item.available} 
-                        onChange={() => toggleAvailability(selectedMember.id, item.date)} 
-                      />
-                      <span>
-                        {item.date.toLocaleDateString('es-ES', {
-                          weekday: 'short',
-                          month: 'short',
-                          day: 'numeric'
-                        })}
-                      </span>
-                    </label>
-                  ))}
+                  {getMemberAvailabilityForCurrentMonth(selectedMember).map((item, index) => {
+                    const isNull = item.available === null;
+                    const isAvailable = item.available === true;
+                    const isUnavailable = item.available === false;
+                    
+                    return (
+                      <label key={index} className="flex items-center p-2 border border-gray-200 dark:border-gray-700 rounded-md cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-900">
+                        <div className="relative mr-2">
+                          <input 
+                            type="checkbox" 
+                            className={`${isNull ? 'opacity-30' : ''}`}
+                            checked={isAvailable} 
+                            onChange={() => toggleAvailability(selectedMember.id, item.date)} 
+                            ref={(el) => {
+                              if (el) {
+                                el.indeterminate = isNull;
+                              }
+                            }}
+                          />
+                          {isNull && (
+                            <span className="absolute inset-0 flex items-center justify-center text-gray-400 text-xs pointer-events-none">
+                              ?
+                            </span>
+                          )}
+                        </div>
+                        <span className={`${isNull ? 'text-gray-400' : isUnavailable ? 'text-red-500' : ''}`}>
+                          {item.date.toLocaleDateString('es-ES', {
+                            weekday: 'short',
+                            month: 'short',
+                            day: 'numeric'
+                          })}
+                          {isNull && <span className="ml-1 text-xs">(sin definir)</span>}
+                        </span>
+                      </label>
+                    );
+                  })}
                   {getCurrentMonthSundays().length === 0 && (
                     <div className="col-span-2 text-center text-gray-500 py-4">
                       No hay domingos en este mes

@@ -4,6 +4,7 @@ import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautif
 import { generateSundays, groupSchedulesByMonth } from '../utils/dateUtils';
 import { SundaySchedule, scheduleService, Song, BandMember, songService, memberService } from '../services/dataService';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
+import { useTheme } from '../context/ThemeContext';
 
 interface InstrumentSelectionModal {
   show: boolean;
@@ -18,6 +19,7 @@ interface AddItemModal {
 }
 
 export const ScheduleTable: React.FC = () => {
+  const { theme } = useTheme();
   const [schedules, setSchedules] = useState<SundaySchedule[]>([]);
   const [instrumentModal, setInstrumentModal] = useState<InstrumentSelectionModal>({
     show: false,
@@ -99,7 +101,34 @@ export const ScheduleTable: React.FC = () => {
     return matchesSearch && matchesCategory;
   });
 
-  // Filter members based on search and instrument
+  // Filter members based on search, instrument, and availability for the specific schedule date
+  const getFilteredMembersForSchedule = (scheduleId: string) => {
+    const schedule = schedules.find(s => s.id === scheduleId);
+    if (!schedule) return [];
+    
+    return availableMembers.filter(member => {
+      const fullName = `${member.firstName} ${member.lastName}`.toLowerCase();
+      const matchesSearch = fullName.includes(searchTerm.toLowerCase());
+      const matchesInstrument = selectedInstrument ? 
+        member.instruments.some(inst => inst.toLowerCase().includes(selectedInstrument.toLowerCase())) : true;
+      
+      // Check if member is available for this specific date
+      const scheduleDate = new Date(schedule.date);
+      const memberAvailability = member.availability.find(avail => {
+        const availDate = new Date(avail.date).toISOString().split('T')[0];
+        const targetDate = scheduleDate.toISOString().split('T')[0];
+        return availDate === targetDate;
+      });
+      
+      // If no availability record exists, default to NOT available (false)
+      // Only show members who have explicitly set their availability to true
+      const isAvailable = memberAvailability ? memberAvailability.available === true : false;
+      
+      return matchesSearch && matchesInstrument && isAvailable;
+    });
+  };
+
+  // Filter members based on search and instrument (for general use)
   const filteredMembers = availableMembers.filter(member => {
     const fullName = `${member.firstName} ${member.lastName}`.toLowerCase();
     const matchesSearch = fullName.includes(searchTerm.toLowerCase());
@@ -203,9 +232,31 @@ export const ScheduleTable: React.FC = () => {
         console.error('Error updating schedule:', error);
       }
     } else if (draggableId.startsWith('member-')) {
-      // Handle member drop - show instrument selection modal
+      // Handle member drop - check availability first, then show instrument selection modal
       const memberId = draggableId.replace('member-', '');
       const member = availableMembers.find(m => m.id === memberId);
+      
+      if (member) {
+        // Check if member is available for this specific date
+        const schedule = schedules.find(s => s.id === scheduleId);
+        if (schedule) {
+          const scheduleDate = new Date(schedule.date);
+          const memberAvailability = member.availability.find(avail => {
+            const availDate = new Date(avail.date).toISOString().split('T')[0];
+            const targetDate = scheduleDate.toISOString().split('T')[0];
+            return availDate === targetDate;
+          });
+          
+          // If no availability record exists, default to NOT available (false)
+          const isAvailable = memberAvailability ? memberAvailability.available === true : false;
+          
+          if (!isAvailable) {
+            alert(`${member.firstName} ${member.lastName} no está disponible para esta fecha`);
+            return;
+          }
+        }
+      }
+      
       setInstrumentModal({
         show: true,
         member: member || null,
@@ -549,7 +600,7 @@ export const ScheduleTable: React.FC = () => {
                                     ref={provided.innerRef}
                                     {...provided.draggableProps}
                                     {...provided.dragHandleProps}
-                                    className={`bg-gray-50 dark:bg-gray-800 p-2 rounded cursor-move ${snapshot.isDragging ? 'shadow-lg' : ''}`}
+                                    className={`bg-gray-50 dark:bg-gray-800 p-2 rounded cursor-move ${theme === 'light' ? 'border border-black' : ''} ${snapshot.isDragging ? 'shadow-lg' : ''}`}
                                   >
                                     <div className="flex justify-between items-center">
                                       <span>
@@ -640,7 +691,7 @@ export const ScheduleTable: React.FC = () => {
                                     ref={provided.innerRef}
                                     {...provided.draggableProps}
                                     {...provided.dragHandleProps}
-                                    className={`bg-gray-50 dark:bg-gray-800 p-2 rounded cursor-move ${snapshot.isDragging ? 'shadow-lg' : ''}`}
+                                    className={`bg-gray-50 dark:bg-gray-800 p-2 rounded cursor-move ${theme === 'light' ? 'border border-black' : ''} ${snapshot.isDragging ? 'shadow-lg' : ''}`}
                                   >
                                     <div className="flex justify-between items-center">
                                       <span>
@@ -842,7 +893,7 @@ export const ScheduleTable: React.FC = () => {
                 </div>
               ) : (
                 <div className="divide-y divide-gray-200 dark:divide-gray-700">
-                  {filteredMembers.map((member) => (
+                  {getFilteredMembersForSchedule(addItemModal.scheduleId).map((member) => (
                     <div key={member.id} className="p-3">
                       <div className="flex justify-between items-center mb-2">
                         <h4 className="font-medium">{member.firstName} {member.lastName}</h4>
@@ -860,9 +911,9 @@ export const ScheduleTable: React.FC = () => {
                       </div>
                     </div>
                   ))}
-                  {filteredMembers.length === 0 && (
+                  {getFilteredMembersForSchedule(addItemModal.scheduleId).length === 0 && (
                     <div className="p-6 text-center text-gray-500">
-                      No se encontraron miembros que coincidan con tus criterios
+                      No se encontraron miembros disponibles que coincidan con tus criterios para esta fecha
                     </div>
                   )}
                 </div>
