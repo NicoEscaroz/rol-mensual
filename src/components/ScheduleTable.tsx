@@ -46,6 +46,13 @@ export const ScheduleTable: React.FC = () => {
     schedule: null,
     isLoading: false
   });
+  const [exportModal, setExportModal] = useState<{
+    isOpen: boolean;
+    selectedMonth: string | null;
+  }>({
+    isOpen: false,
+    selectedMonth: null
+  });
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -499,9 +506,199 @@ export const ScheduleTable: React.FC = () => {
     // Don't close modal - allow adding multiple members
   };
 
-  const exportToPDF = () => {
-    // PDF export functionality would be implemented here
-    alert('Exporting to PDF...');
+  const openExportModal = () => {
+    setExportModal({ isOpen: true, selectedMonth: null });
+  };
+
+  const closeExportModal = () => {
+    setExportModal({ isOpen: false, selectedMonth: null });
+  };
+
+  const exportToPDF = (monthKey: string) => {
+    const monthSchedules = groupSchedulesByMonth(schedules)[monthKey];
+    if (!monthSchedules || monthSchedules.length === 0) {
+      alert('No hay programas para este mes');
+      return;
+    }
+
+    // Create PDF content
+    const monthName = monthSchedules[0].monthName;
+    const year = new Date(monthSchedules[0].date).getFullYear();
+    
+    // Generate HTML for PDF
+    let htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <style>
+          @page { 
+            size: A4 landscape; 
+            margin: 20mm;
+          }
+          body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #000;
+            color: #fff;
+          }
+          h1 {
+            text-align: center;
+            font-size: 48px;
+            font-weight: bold;
+            text-transform: uppercase;
+            margin-bottom: 30px;
+            letter-spacing: 2px;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+          }
+          th {
+            background: linear-gradient(135deg, #7CB342 0%, #00695C 100%);
+            color: white;
+            padding: 15px;
+            text-align: left;
+            font-size: 20px;
+            font-weight: bold;
+            text-transform: uppercase;
+            border: 2px solid #555;
+          }
+          td {
+            padding: 15px;
+            border: 2px solid #333;
+            vertical-align: top;
+            font-size: 16px;
+            background: #000;
+          }
+          tr:nth-child(even) td {
+            background: #111;
+          }
+          .date-cell {
+            font-weight: bold;
+            font-size: 18px;
+            white-space: nowrap;
+          }
+          .song-list, .band-list {
+            margin: 0;
+            padding: 0;
+            list-style: none;
+          }
+          .song-list li, .band-list li {
+            margin-bottom: 8px;
+            line-height: 1.4;
+          }
+          .leader-item {
+            margin-bottom: 6px;
+          }
+          .leader-label {
+            font-weight: bold;
+            color: #7CB342;
+          }
+        </style>
+      </head>
+      <body>
+        <h1>C&F WORSHIP SETLIST</h1>
+        <h2 style="text-align: center; font-size: 32px; font-weight: bold; text-transform: uppercase; margin-bottom: 20px; color: #7CB342;">${monthName.toUpperCase()}</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>FECHA</th>
+              <th>CANCIONES</th>
+              <th>BANDA</th>
+              <th>LÍDER</th>
+            </tr>
+          </thead>
+          <tbody>
+    `;
+
+    monthSchedules.forEach(schedule => {
+      const dateStr = new Date(schedule.date).toLocaleDateString('es-ES', {
+        day: 'numeric',
+        month: 'short'
+      }).toUpperCase();
+
+      htmlContent += `
+            <tr>
+              <td class="date-cell">${dateStr}</td>
+              <td>
+                <ol class="song-list">
+      `;
+
+      schedule.songs.forEach(song => {
+        const singerText = song.singer ? ` (${song.singer.split(' ')[0]})` : '';
+        htmlContent += `<li>${song.name} (${song.key})${singerText}</li>`;
+      });
+
+      if (schedule.songs.length === 0) {
+        htmlContent += `<li style="color: #666;">Sin canciones asignadas</li>`;
+      }
+
+      htmlContent += `
+                </ol>
+              </td>
+              <td>
+                <ul class="band-list">
+      `;
+
+      schedule.band.forEach(member => {
+        htmlContent += `<li>${member.instrument}: ${member.name.split(' ')[0]}</li>`;
+      });
+
+      if (schedule.band.length === 0) {
+        htmlContent += `<li style="color: #666;">Sin banda asignada</li>`;
+      }
+
+      htmlContent += `
+                </ul>
+              </td>
+              <td>
+      `;
+
+      if (schedule.leaders.dm1) {
+        htmlContent += `<div class="leader-item"><span class="leader-label">DM1:</span> ${schedule.leaders.dm1}</div>`;
+      }
+      if (schedule.leaders.dm2) {
+        htmlContent += `<div class="leader-item"><span class="leader-label">DM2:</span> ${schedule.leaders.dm2}</div>`;
+      }
+      if (schedule.leaders.talkback) {
+        htmlContent += `<div class="leader-item"><span class="leader-label">TALKBACK:</span> ${schedule.leaders.talkback}</div>`;
+      }
+      if (!schedule.leaders.dm1 && !schedule.leaders.dm2 && !schedule.leaders.talkback) {
+        htmlContent += `<div style="color: #666;">Sin líderes asignados</div>`;
+      }
+
+      htmlContent += `
+              </td>
+            </tr>
+      `;
+    });
+
+    htmlContent += `
+          </tbody>
+        </table>
+      </body>
+      </html>
+    `;
+
+    // Open print dialog with the generated HTML
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(htmlContent);
+      printWindow.document.close();
+      printWindow.focus();
+      
+      // Wait for content to load then print
+      printWindow.onload = () => {
+        setTimeout(() => {
+          printWindow.print();
+        }, 250);
+      };
+    }
+
+    closeExportModal();
   };
 
   const toggleMonthCollapse = (monthKey: string) => {
@@ -518,7 +715,7 @@ export const ScheduleTable: React.FC = () => {
   return <div className="w-full">
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-xl font-bold">Programa Dominical</h2>
-        <button onClick={exportToPDF} className="flex items-center px-3 py-2 bg-gray-100 dark:bg-gray-800 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
+        <button onClick={openExportModal} className="flex items-center px-3 py-2 bg-gray-100 dark:bg-gray-800 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
           <DownloadIcon size={16} className="mr-2" />
           Exportar PDF
         </button>
@@ -796,8 +993,8 @@ export const ScheduleTable: React.FC = () => {
 
       {/* Add Item Modal */}
       {addItemModal.show && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 p-4 rounded-lg max-w-2xl w-full m-4 max-h-[80vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 pb-20 sm:pb-4">
+          <div className="bg-white dark:bg-gray-800 p-4 rounded-lg max-w-2xl w-full max-h-[calc(100vh-6rem)] sm:max-h-[80vh] overflow-y-auto flex flex-col">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold">
                 Agregar {addItemModal.type === 'song' ? 'Canción' : 'Miembro de la Banda'}
@@ -862,7 +1059,7 @@ export const ScheduleTable: React.FC = () => {
             </div>
 
             {/* Items List */}
-            <div className="max-h-64 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-md">
+            <div className="flex-1 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-md min-h-[200px] max-h-[400px]">
               {addItemModal.type === 'song' ? (
                 <div className="divide-y divide-gray-200 dark:divide-gray-700">
                   {filteredSongs.map((song) => (
@@ -965,5 +1162,49 @@ export const ScheduleTable: React.FC = () => {
         onCancel={closeDeleteModal}
         isLoading={deleteModal.isLoading}
       />
+
+      {/* Export PDF Modal */}
+      {exportModal.isOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg max-w-md w-full">
+            <h3 className="text-lg font-semibold mb-4">Exportar Programa a PDF</h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+              Selecciona el mes que deseas exportar:
+            </p>
+            <div className="space-y-2 max-h-[400px] overflow-y-auto">
+              {Object.entries(groupSchedulesByMonth(schedules)).map(([monthKey, monthSchedules]) => {
+                const monthName = monthSchedules[0]?.monthName;
+                const scheduleCount = monthSchedules.length;
+                
+                return (
+                  <button
+                    key={monthKey}
+                    onClick={() => exportToPDF(monthKey)}
+                    className="w-full p-4 text-left bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-md transition-colors border border-gray-200 dark:border-gray-600"
+                  >
+                    <div className="font-medium capitalize">{monthName}</div>
+                    <div className="text-sm text-gray-500 dark:text-gray-400">
+                      {scheduleCount} programa{scheduleCount !== 1 ? 's' : ''}
+                    </div>
+                  </button>
+                );
+              })}
+              {Object.keys(groupSchedulesByMonth(schedules)).length === 0 && (
+                <div className="text-center text-gray-500 py-8">
+                  No hay programas disponibles para exportar
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end gap-2 mt-6">
+              <button
+                onClick={closeExportModal}
+                className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
 };
