@@ -534,84 +534,115 @@ export const ScheduleTable: React.FC = () => {
         <style>
           @page { 
             size: A4 landscape; 
-            margin: 20mm;
+            margin: 10mm;
+          }
+          * {
+            box-sizing: border-box;
           }
           body {
             font-family: Arial, sans-serif;
             margin: 0;
-            padding: 20px;
+            padding: 10px;
             background: #000;
             color: #fff;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
           }
           h1 {
             text-align: center;
-            font-size: 48px;
+            font-size: 36px;
             font-weight: bold;
             text-transform: uppercase;
-            margin-bottom: 30px;
+            margin: 5px 0;
             letter-spacing: 2px;
+          }
+          h2 {
+            margin: 5px 0 10px 0;
+          }
+          .table-container {
+            flex: 1;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
           }
           table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 20px;
+            font-size: 11px;
+            table-layout: fixed;
           }
           th {
             background: linear-gradient(135deg, #7CB342 0%, #00695C 100%);
             color: white;
-            padding: 15px;
+            padding: 8px 6px;
             text-align: left;
-            font-size: 20px;
+            font-size: 14px;
             font-weight: bold;
             text-transform: uppercase;
             border: 2px solid #555;
           }
+          th:nth-child(1) { width: 10%; }
+          th:nth-child(2) { width: 35%; }
+          th:nth-child(3) { width: 30%; }
+          th:nth-child(4) { width: 25%; }
           td {
-            padding: 15px;
+            padding: 6px;
             border: 2px solid #333;
             vertical-align: top;
-            font-size: 16px;
             background: #000;
+            overflow: hidden;
           }
           tr:nth-child(even) td {
             background: #111;
           }
           .date-cell {
             font-weight: bold;
-            font-size: 18px;
+            font-size: 13px;
             white-space: nowrap;
           }
           .song-list, .band-list {
             margin: 0;
             padding: 0;
-            list-style: none;
+            padding-left: 15px;
           }
           .song-list li, .band-list li {
-            margin-bottom: 8px;
-            line-height: 1.4;
+            margin-bottom: 3px;
+            line-height: 1.2;
+            font-size: 10px;
           }
           .leader-item {
-            margin-bottom: 6px;
+            margin-bottom: 3px;
+            font-size: 10px;
+            line-height: 1.2;
           }
           .leader-label {
             font-weight: bold;
             color: #7CB342;
           }
+          /* Force single page */
+          tbody {
+            page-break-inside: avoid;
+          }
+          tr {
+            page-break-inside: avoid;
+          }
         </style>
       </head>
       <body>
         <h1>C&F WORSHIP SETLIST</h1>
-        <h2 style="text-align: center; font-size: 32px; font-weight: bold; text-transform: uppercase; margin-bottom: 20px; color: #7CB342;">${monthName.toUpperCase()}</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>FECHA</th>
-              <th>CANCIONES</th>
-              <th>BANDA</th>
-              <th>LÍDER</th>
-            </tr>
-          </thead>
-          <tbody>
+        <h2 style="text-align: center; font-size: 24px; font-weight: bold; text-transform: uppercase; margin-bottom: 5px; color: #7CB342;">${monthName.toUpperCase()}</h2>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>FECHA</th>
+                <th>CANCIONES</th>
+                <th>BANDA</th>
+                <th>LÍDER</th>
+              </tr>
+            </thead>
+            <tbody>
     `;
 
     monthSchedules.forEach(schedule => {
@@ -677,8 +708,9 @@ export const ScheduleTable: React.FC = () => {
     });
 
     htmlContent += `
-          </tbody>
-        </table>
+            </tbody>
+          </table>
+        </div>
       </body>
       </html>
     `;
